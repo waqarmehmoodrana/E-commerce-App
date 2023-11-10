@@ -61,7 +61,13 @@ export const updateCategoryController = async (req, res) => {
   }
 };
 
+
+
+
+
 // Get All Category
+// Get All Category
+
 export const categoryControlller = async (req, res) => {
   try {
     const category = await categoryModel.find({});
