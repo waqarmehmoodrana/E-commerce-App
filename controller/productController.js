@@ -1,9 +1,10 @@
 import productModel from "../models/productModel.js";
 import categoryModel from "../models/categoryModel.js";
 import orderModel from "../models/orderModel.js";
-
-import fs from "fs";
+import userModel from "../models/userModel.js";
 import slugify from "slugify";
+import fs from 'fs';
+import path from 'path';
 
 // import braintree from "braintree";
 // import dotenv from "dotenv";
@@ -18,49 +19,142 @@ import slugify from "slugify";
 //   privateKey: process.env.BRAINTREE_PRIVATE_KEY,
 // });
 
+
+// Create Product Controller
 export const createProductController = async (req, res) => {
   try {
-    const { name, description, price, category, quantity, shipping } =
-      req.fields;
-    const { photo } = req.files;
+    const { name, description, price, category, quantity, shipping } = req.body;
+
     // Validation
-    switch (true) {
-      case !name:
-        return res.status(500).send({ error: "Name is Required" });
-      case !description:
-        return res.status(500).send({ error: "Description is Required" });
-      case !price:
-        return res.status(500).send({ error: "Price is Required" });
-      case !category:
-        return res.status(500).send({ error: "Category is Required" });
-      case !quantity:
-        return res.status(500).send({ error: "Quantity is Required" });
-      case photo && photo.size > 1000000:
-        return res
-          .status(500)
-          .send({ error: "photo is Required and should be less then 1mb" });
+    if (!name || !description || !price || !category || !quantity) {
+      return res.status(400).json({ error: 'Please provide all required fields.' });
     }
 
-    const products = new productModel({ ...req.fields, slug: slugify(name) });
-    if (photo) {
-      products.photo.data = fs.readFileSync(photo.path);
-      products.photo.contentType = photo.type;
-    }
-    await products.save();
-    res.status(201).send({
-      success: true,
-      message: "Product Created Successfully",
-      products,
+    // Process photos
+    const photos = req.files.map((file) => ({
+      data: Buffer.from(fs.readFileSync(file.path)), // Read file content and convert to Buffer
+      contentType: file.mimetype,
+    }));
+
+    // Get the user information from the authenticated user
+    const user = await userModel.findById(req.user._id);
+
+    // Create new product
+    const newProduct = new productModel({
+      name,
+      description,
+      price,
+      category,
+      quantity,
+      shipping,
+      photos,
+      user: user._id, // Assuming the user ID is available in the user object
+      slug: slugify(name), // Generate slug based on the product name
+      phoneNumber: user.phone, // Assuming user's phone number is available
+      address: user.address, // Assuming user's address is available
     });
+
+    // Save the product to the database
+    await newProduct.save();
+
+    //  Clear uploads folder
+    clearUploadsFolder();
+
+    res.status(201).json({ success: true, message: 'Product created successfully', product: newProduct });
+
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: 'Error in creating product' });
+  }
+};
+
+const UPLOADS_FOLDER = path.join(process.cwd(), 'uploads'); // Change 'uploads' to your actual uploads folder name
+
+const clearUploadsFolder = () => {
+  try {
+    // Get a list of files in the uploads folder
+    const files = fs.readdirSync(UPLOADS_FOLDER);
+
+    // Remove each file from the uploads folder
+    files.forEach(file => {
+      const filePath = path.join(UPLOADS_FOLDER, file);
+      fs.unlinkSync(filePath);
+    });
+
+    console.log('Uploads folder cleared successfully');
+  } catch (error) {
+    console.error('Error clearing uploads folder:', error);
+  }
+};
+
+// get photo Controller
+export const productPhotoController = async (req, res) => {
+  try {
+    const product = await productModel.findById(req.params.pid).select("photos");
+    if (product.photos[0].data) {
+      res.set("Content-type", product.photos[0].contentType);
+      return res.status(200).send(product.photos[0].data);
+    }
   } catch (error) {
     console.log(error);
     res.status(500).send({
       success: false,
+      message: "Erorr while getting photo",
       error,
-      message: "Error in crearing product",
     });
   }
 };
+
+// Get single photo controller  (for  Product Details Carousel)
+export const getSinglePhotoController = async (req, res) => {
+  try {
+    const product = await productModel.findById(req.params.pid).select("photos");
+
+    if (!product) {
+      return res.status(404).send({ success: false, message: "Product not found" });
+    }
+
+    // Directly access the photo by its ID from the product's photos array
+    const photo = product.photos.id(req.params.photoId);
+
+    if (!photo) {
+      return res.status(404).send({ success: false, message: "Photo not found" });
+    }
+
+    // Assuming photo.data contains the binary data of the photo
+    res.set("Content-type", photo.contentType);
+    res.status(200).send(photo.data);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      success: false,
+      message: "Error while getting photo",
+      error,
+    });
+  }
+};
+
+
+// get all photos of the product
+export const allProductPhotosController = async (req, res) => {
+  try {
+    const product = await productModel.findById(req.params.pid).select("photos");
+    const photos = product.photos.map(photo => ({
+      _id: photo._id,
+      contentType: photo.contentType
+    }));
+    res.status(200).json({ photos });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      success: false,
+      message: "Error while getting photos",
+      error,
+    });
+  }
+};
+
 
 //get all products
 export const getProductController = async (req, res) => {
@@ -68,20 +162,52 @@ export const getProductController = async (req, res) => {
     const products = await productModel
       .find({})
       .populate("category")
-      .select("-photo")
+      .select("name price category slug photos") // Include photos field
       .limit(12)
       .sort({ createdAt: -1 });
+
     res.status(200).send({
       success: true,
-      counTotal: products.length,
-      message: "ALlProducts ",
+      countTotal: products.length,
+      message: "All Products",
       products,
     });
   } catch (error) {
     console.log(error);
     res.status(500).send({
       success: false,
-      message: "Erorr in getting products",
+      message: "Error in getting products",
+      error: error.message,
+    });
+  }
+};
+
+
+// get specific user ads 
+export const getAdsByUserController = async (req, res) => {
+  try {
+    // Assuming you have authentication middleware that sets req.user
+    const userId = req.user._id;
+
+    // Adjust the query to find ads posted by the authenticated user
+    const products = await productModel
+      .find({ user: userId }) // Assuming "user" is the field that stores the user ID in your product model
+      .populate("category")
+      .select("-photo")
+      .limit(12)
+      .sort({ createdAt: -1 });
+
+    res.status(200).send({
+      success: true,
+      countTotal: products.length,
+      message: "All Products by User",
+      products,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      success: false,
+      message: "Error in getting products",
       error: error.message,
     });
   }
@@ -109,24 +235,6 @@ export const getSingleProductController = async (req, res) => {
   }
 };
 
-// get photo
-export const productPhotoController = async (req, res) => {
-  try {
-    const product = await productModel.findById(req.params.pid).select("photo");
-    if (product.photo.data) {
-      res.set("Content-type", product.photo.contentType);
-      return res.status(200).send(product.photo.data);
-    }
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({
-      success: false,
-      message: "Erorr while getting the photo",
-      error,
-    });
-  }
-};
-
 //delete controller
 export const deleteProductController = async (req, res) => {
   try {
@@ -146,53 +254,47 @@ export const deleteProductController = async (req, res) => {
 };
 
 //upate product  controller
+// Update product controller
 export const updateProductController = async (req, res) => {
   try {
-    const { name, description, price, category, quantity, shipping } =
-      req.fields;
-    const { photo } = req.files;
-    //alidation
-    switch (true) {
-      case !name:
-        return res.status(500).send({ error: "Name is Required" });
-      case !description:
-        return res.status(500).send({ error: "Description is Required" });
-      case !price:
-        return res.status(500).send({ error: "Price is Required" });
-      case !category:
-        return res.status(500).send({ error: "Category is Required" });
-      case !quantity:
-        return res.status(500).send({ error: "Quantity is Required" });
-      case photo && photo.size > 1000000:
-        return res
-          .status(500)
-          .send({ error: "photo is Required and should be less then 1mb" });
+    const { name, description, price, category, quantity, shipping } = req.fields;
+    const { photos } = req.files; // Assuming photos are sent as an array of files
+
+    // Validation
+    if (!name || !description || !price || !category || !quantity) {
+      return res.status(400).json({ error: 'Please provide all required fields.' });
     }
 
-    const products = await productModel.findByIdAndUpdate(
-      req.params.pid,
-      { ...req.fields, slug: slugify(name) },
-      { new: true }
-    );
-    if (photo) {
-      products.photo.data = fs.readFileSync(photo.path);
-      products.photo.contentType = photo.type;
+    // Find the product by ID
+    const product = await productModel.findById(req.params.pid);
+
+    // Update product fields
+    product.name = name;
+    product.description = description;
+    product.price = price;
+    product.category = category;
+    product.quantity = quantity;
+    product.shipping = shipping;
+
+    // If photos are provided, update the photos array
+    if (photos && photos.length > 0) {
+      const updatedPhotos = photos.map((file) => ({
+        data: fs.readFileSync(file.path),
+        contentType: file.type,
+      }));
+      product.photos = updatedPhotos;
     }
-    await products.save();
-    res.status(201).send({
-      success: true,
-      message: "Product Updated Successfully",
-      products,
-    });
+
+    // Save the updated product
+    await product.save();
+
+    res.status(200).json({ success: true, message: 'Product updated successfully', product });
   } catch (error) {
-    console.log(error);
-    res.status(500).send({
-      success: false,
-      error,
-      message: "Error in Updte product",
-    });
+    console.error(error);
+    res.status(500).json({ success: false, error: 'Error updating product' });
   }
 };
+
 
 // filters
 export const productFiltersController = async (req, res) => {

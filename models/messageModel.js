@@ -1,0 +1,14 @@
+import mongoose from "mongoose";
+
+const messageModel = mongoose.Schema(
+    {
+        sender: { type: mongoose.Schema.Types.ObjectId, ref: "users" },
+        content: { type: String, trim: true },
+        chat: { type: mongoose.Schema.Types.ObjectId, ref: "Chat" },
+        readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    },
+    { timestamps: true }
+);
+
+
+export default mongoose.model("Message", messageModel);

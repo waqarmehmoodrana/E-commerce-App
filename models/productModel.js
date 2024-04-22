@@ -27,12 +27,27 @@ const productSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    photo: {
-      data: Buffer,
-      contentType: String,
-    },
-    shipping: {
+    photos: [
+      {
+        data: Buffer,
+        contentType: String,
+      },
+    ],
+    cargo: {
       type: Boolean,
+    },
+    user: {
+      type: mongoose.ObjectId,
+      ref: "users", // Reference to the "users" model
+      required: true,
+    },
+    phoneNumber: {
+      type: Number,
+      required: true,
+    },
+    address: {
+      type: String,
+      required: true,
     },
   },
   { timestamps: true }

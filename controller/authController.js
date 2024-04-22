@@ -156,14 +156,8 @@ export const forgotPasswordController = async (req, res) => {
   }
 };
 
-// test controller
 
-export const testController = (req, res) => {
-  res.send("Protected Route");
-};
-
-
-//update prfole
+//Update Profile
 export const updateProfileController = async (req, res) => {
   try {
     const { name, email, password, address, phone } = req.body;
@@ -199,7 +193,7 @@ export const updateProfileController = async (req, res) => {
   }
 };
 
-//orders
+//Orders
 export const getOrdersController = async (req, res) => {
   try {
     const orders = await orderModel
@@ -216,7 +210,8 @@ export const getOrdersController = async (req, res) => {
     });
   }
 };
-//orders
+
+//All Orders
 export const getAllOrdersController = async (req, res) => {
   try {
     const orders = await orderModel
@@ -255,3 +250,100 @@ export const orderStatusController = async (req, res) => {
     });
   }
 };
+
+
+// Chat Controllers:
+
+// Get all Users
+// Controller to fetch all users
+export const getAllUsersController = async (req, res) => {
+  try {
+    // Fetch all users from the database
+    const users = await userModel.find({});
+
+    // Send the list of users as a response
+    res.status(200).send({
+      success: true,
+      message: "Users fetched successfully",
+      users: users
+    });
+  } catch (error) {
+    // Handle errors
+    console.error("Error fetching users:", error);
+    res.status(500).send({
+      success: false,
+      message: "Error fetching users",
+      error: error.message
+    });
+  }
+};
+
+
+export const allUsers = async (req, res) => {
+  const keyword = req.query.search
+    ? {
+      $or: [
+        { name: { $regex: req.query.search, $options: "i" } },
+        { email: { $regex: req.query.search, $options: "i" } },
+      ],
+    }
+    : {};
+
+  const users = await userModel.find(keyword).find({ _id: { $ne: req.user._id } });
+  res.send(users);
+};
+
+
+
+// Get logged in User ID
+// Get Logged-in User ID
+export const getLoggedInUserIdController = async (req, res) => {
+  try {
+    const userId = req.user._id; // Extracting user ID from the request object
+    res.status(200).send({
+      success: true,
+      message: "User ID fetched successfully",
+      userId: userId
+    });
+  } catch (error) {
+    console.error("Error fetching logged-in user ID:", error);
+    res.status(500).send({
+      success: false,
+      message: "Error fetching logged-in user ID",
+      error: error.message
+    });
+  }
+};
+
+export const getUserDataController = async (req, res) => {
+  try {
+    // Extract user ID from the request object
+    const userId = req.user._id;
+
+    // Find the user in the database using the user ID
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      return res.status(404).send({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Send the user data as a response
+    res.status(200).send({
+      success: true,
+      message: "User data fetched successfully",
+      user: user
+    });
+  } catch (error) {
+    console.error("Error fetching user data:", error);
+    res.status(500).send({
+      success: false,
+      message: "Error fetching user data",
+      error: error.message
+    });
+  }
+};
+
+

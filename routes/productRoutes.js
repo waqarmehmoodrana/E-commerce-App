@@ -12,66 +12,88 @@ import {
   searchProductController,
   realtedProductController,
   productCategoryController,
-  
+  getAdsByUserController,
+  allProductPhotosController,
+  getSinglePhotoController,
 } from "../controller/productController.js";
 import { isAdmin, requireSignIn } from "../middlewares/authMiddleware.js";
 import formidable from "express-formidable";
+import multer from 'multer';
+
 
 const router = express.Router();
 
-//routes
-router.post(
-  "/create-product",
-  requireSignIn,
-  isAdmin,
-  formidable(),
-  createProductController
-);
+// Create Product route
+// Multer storage configuration
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/'); // Destination folder for storing the uploaded files
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname); // Generate unique file names
+  },
+});
 
-// update Product routes
+// Multer file filter configuration
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true); // Accept only image files
+  } else {
+    cb(new Error('Invalid file type. Only images are allowed.'), false);
+  }
+};
+
+// Multer upload configuration
+const upload = multer({ storage, fileFilter });
+
+// Create Ad route
+router.post('/create-product', requireSignIn, upload.array('photos', 6), createProductController);
+
+// Update Product route
 router.put(
   "/update-product/:pid",
   requireSignIn,
-  isAdmin,
   formidable(),
   updateProductController
 );
 
-//get products
+// get sigle photo of the add for product details Carousel
+router.get('/single-photo/:pid/:photoId', getSinglePhotoController);
+
+// get all the photos of the Ads 
+router.get('/all-product-photos/:pid', allProductPhotosController);
+
+// Get all products (ads)
 router.get("/get-product", getProductController);
 
-//single product
+// Get ads of specific user
+router.get("/get-ads", requireSignIn, getAdsByUserController);
+
+// Get single product (Ad)
 router.get("/get-product/:slug", getSingleProductController);
 
-//get photo
-router.get("/product-photo/:pid", productPhotoController);
+// Get first photo of a product (Ad)
+router.get("/product-photo/:pid/:photoId", productPhotoController);
 
-//delete rproduct
+// Delete product (Ad)
 router.delete("/delete-product/:pid", deleteProductController);
 
-//filter product
+// Filter products (Ads)
 router.post("/product-filters", productFiltersController);
 
-//product count
+// Get product count (Ads)
 router.get("/product-count", productCountController);
 
-//product per page
+// Get products per page (Ads)
 router.get("/product-list/:page", productListController);
 
-//search product
+// Search product (Ads)
 router.get("/search/:keyword", searchProductController);
 
-//similar product
+// Get related products (Ads)
 router.get("/related-product/:pid/:cid", realtedProductController);
 
-//category wise product
+// Get products by category (ads)
 router.get("/product-category/:slug", productCategoryController);
-
-// //payments routes
-// //token
-// router.get("/braintree/token", braintreeTokenController);
-
-// //payments
-// router.post("/braintree/payment", requireSignIn, brainTreePaymentController);
 
 export default router;
